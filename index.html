@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+      @font-face {
+        font-family: 'LucideIcons';
+        src: url(https://cdn.jsdelivr.net/npm/lucide-static@latest/font/Lucide.ttf) format('truetype');
+      }
+      .lucide {
+        font-family: 'LucideIcons'; font-style: normal; font-weight: normal; font-variant: normal; text-rendering: auto; line-height: 1; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      }
+      .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-left: 8px; }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      /* Center the Google button container */
+      #google-button-container { display: flex; justify-content: center; }
+    </style>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <script>
+        // Tailwind config (ensure compatibility with the CDN version used)
+        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'], } } } }
+    </script>
+</head>
+<body class="bg-gray-100 font-sans flex items-center justify-center min-h-screen">
+
+    <div class="container mx-auto p-4 max-w-lg w-full">
+
+        <div id="auth-section" class="bg-white p-6 rounded-lg shadow-md mb-4">
+            <h2 class="text-xl font-semibold mb-4 text-center">Login / Sign Up</h2>
+            <div id="auth-message" class="text-sm mb-3 text-center p-2 rounded hidden"></div>
+
+            <input type="email" id="email" placeholder="Email" class="w-full p-2 border border-gray-300 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <input type="password" id="password" placeholder="Password" class="w-full p-2 border border-gray-300 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div class="flex justify-between space-x-2 mb-4">
+                <button id="login-button" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded transition duration-200">Login</button>
+                <button id="signup-button" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded transition duration-200">Sign Up</button>
+            </div>
+             <p class="text-xs text-gray-500 mt-1 mb-3 text-center">If signing up, a confirmation email might be sent.</p>
+
+            <div class="relative flex py-3 items-center">
+                <div class="flex-grow border-t border-gray-300"></div>
+                <span class="flex-shrink mx-4 text-gray-500 text-sm">Or sign in with</span>
+                <div class="flex-grow border-t border-gray-300"></div>
+            </div>
+
+            <div id="google-button-container" class="mt-4">
+                <div id="g_id_onload"
+                     data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com" data-context="signin"
+                     data-ux_mode="popup"
+                     data-callback="handleSignInWithGoogle" data-nonce="" data-auto_prompt="false"> </div>
+                <div class="g_id_signin"
+                     data-type="standard"
+                     data-shape="rectangular"
+                     data-theme="outline"
+                     data-text="signin_with"
+                     data-size="large"
+                     data-logo_alignment="left">
+                </div>
+            </div>
+
+        </div>
+
+        <div id="chat-interface" class="hidden bg-white rounded-lg shadow-md flex flex-col" style="height: 70vh;">
+             <div class="flex justify-between items-center p-3 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                 <h2 class="text-lg font-semibold text-gray-700">Chat with AI</h2>
+                 <div class="flex items-center space-x-2">
+                      <span id="user-email" class="text-sm text-gray-600"></span>
+                     <button id="logout-button" title="Logout" class="text-red-500 hover:text-red-700 transition duration-200">
+                         <span class="lucide">&#xea1e;</span> </button>
+                 </div>
+             </div>
+             <div id="message-area" class="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-50">
+                 <div id="loading-indicator" class="flex justify-start items-center hidden"> <div class="bg-gray-200 text-gray-800 p-3 rounded-lg max-w-xs lg:max-w-md shadow flex items-center"> <span>Thinking...</span> <div class="loader ml-2"></div> </div> </div>
+             </div>
+             <div class="p-4 border-t border-gray-200 bg-gray-100 rounded-b-lg">
+                 <div class="flex space-x-2">
+                     <input type="text" id="message-input" placeholder="Type your message..." class="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                     <button id="send-button" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold p-2 rounded-lg transition duration-200 flex items-center justify-center w-12 h-10"> <span class="lucide">&#xea17;</span> </button>
+                 </div>
+             </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const SUPABASE_URL = 'https://ikftyunzqllocvjjevag.supabase.co'; // Replace
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlrZnR5dW56cWxsb2N2ampldmFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwNDA4MDQsImV4cCI6MjA1OTYxNjgwNH0.2MBXos4fD1bJ8Bxttri9UdY1c2PVy9dDBcoIn0STzCE'; // Replace
+        // ⚠️ IMPORTANT: Replace with your Google Cloud OAuth Client ID
+        const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
+
+        // --- DOM Elements ---
+        // (Keep existing element selections)
+        const authSection = document.getElementById('auth-section');
+        const chatInterface = document.getElementById('chat-interface');
+        const loginButton = document.getElementById('login-button');
+        const signupButton = document.getElementById('signup-button');
+        const logoutButton = document.getElementById('logout-button');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const messageArea = document.getElementById('message-area');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const userEmailDisplay = document.getElementById('user-email');
+        const authMessage = document.getElementById('auth-message');
+        const loadingIndicator = document.getElementById('loading-indicator');
+
+        // --- Supabase Client Initialization ---
+        let supabaseClient = null;
+        try {
+            if (!SUPABASE_URL || SUPABASE_URL === 'YOUR_SUPABASE_URL' || !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+                 throw new Error("Supabase URL or Anon Key is not configured.");
+            }
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log("Supabase client initialized successfully.");
+        } catch (error) {
+            console.error("Supabase initialization error:", error);
+            showAuthMessage(error.message || "Could not initialize Supabase.", true);
+            if(loginButton) loginButton.disabled = true;
+            if(signupButton) signupButton.disabled = true;
+            // Consider disabling Google button too if Supabase fails
+        }
+
+        // --- Utility Functions ---
+        // (Keep existing utility functions: showAuthMessage, clearAuthMessages, scrollToBottom, showLoading, addMessageToUI)
+        function showAuthMessage(message, isError = false) { if (authMessage) { authMessage.textContent = message; authMessage.classList.remove('hidden'); if (isError) { authMessage.classList.remove('text-green-700', 'bg-green-100'); authMessage.classList.add('text-red-700', 'bg-red-100'); } else { authMessage.classList.remove('text-red-700', 'bg-red-100'); authMessage.classList.add('text-green-700', 'bg-green-100'); } } if (isError) console.error("Auth Message (Error):", message); else console.log("Auth Message (Success):", message); }
+        function clearAuthMessages() { if (authMessage) authMessage.classList.add('hidden'); }
+        function scrollToBottom() { if (messageArea) { if (loadingIndicator && !loadingIndicator.classList.contains('hidden')) { messageArea.appendChild(loadingIndicator); } messageArea.scrollTop = messageArea.scrollHeight; } }
+        function showLoading(show) { if (loadingIndicator) { loadingIndicator.classList.toggle('hidden', !show); if (show && messageArea) { messageArea.appendChild(loadingIndicator); scrollToBottom(); } } }
+        function addMessageToUI(message, isUser) { if (!messageArea) return; if (loadingIndicator && !loadingIndicator.classList.contains('hidden') && !isUser) { showLoading(false); } const messageDiv = document.createElement('div'); messageDiv.classList.add('flex', isUser ? 'justify-end' : 'justify-start', 'mb-4'); const messageBubble = document.createElement('div'); messageBubble.classList.add('p-3', 'rounded-lg', 'max-w-xs', 'lg:max-w-md', 'shadow', 'break-words'); messageBubble.textContent = message; if (isUser) { messageBubble.classList.add('bg-blue-500', 'text-white'); } else { messageBubble.classList.add('bg-gray-200', 'text-gray-800'); } messageDiv.appendChild(messageBubble); if (loadingIndicator) { messageArea.insertBefore(messageDiv, loadingIndicator); } else { messageArea.appendChild(messageDiv); } scrollToBottom(); }
+
+
+        // --- Google Sign-In Handler ---
+        // This function MUST be accessible globally for the Google library callback
+        async function handleSignInWithGoogle(response) {
+          console.log("Google Sign-In response received:", response);
+          clearAuthMessages(); // Clear previous messages
+
+          if (!response.credential) {
+              console.error("Google Sign-In failed: No credential received.");
+              showAuthMessage("Google Sign-In failed. Please try again.", true);
+              return;
+          }
+
+          if (!supabaseClient) {
+               console.error("Supabase client not available for Google Sign-In.");
+               showAuthMessage("Authentication service is not ready. Please wait and try again.", true);
+               return;
+          }
+
+          try {
+              // Disable buttons during sign-in attempt (optional)
+              // loginButton.disabled = true;
+              // signupButton.disabled = true;
+
+              showAuthMessage("Signing in with Google...", false); // Indicate progress
+
+              const { data, error } = await supabaseClient.auth.signInWithIdToken({
+                provider: 'google',
+                token: response.credential, // The ID token provided by Google
+                // nonce: 'OPTIONAL_NONCE' // Include if you used a nonce
+              });
+
+              if (error) {
+                  console.error('Supabase Google sign-in error:', error);
+                  showAuthMessage(error.message || 'Failed to sign in with Google via Supabase.', true);
+              } else {
+                  console.log('Supabase Google sign-in successful:', data);
+                  // No need to show success message here, onAuthStateChange will handle UI update
+              }
+          } catch (catchError) {
+              console.error('Unexpected error during Google sign-in:', catchError);
+              showAuthMessage('An unexpected error occurred during Google sign-in.', true);
+          } finally {
+               // Re-enable buttons if they were disabled
+               // loginButton.disabled = false;
+               // signupButton.disabled = false;
+          }
+        }
+        // Make the handler globally accessible if it's not already (though defining it here usually works)
+        window.handleSignInWithGoogle = handleSignInWithGoogle;
+
+
+        // --- Authentication Logic (Email/Password & Logout) ---
+        // (Keep existing handleLogin, handleSignup, handleLogout functions)
+        async function handleLogin() { clearAuthMessages(); if (!supabaseClient) return showAuthMessage("Supabase client not available.", true); const email = emailInput.value; const password = passwordInput.value; if (!email || !password) return showAuthMessage("Please enter both email and password.", true); try { loginButton.disabled = true; signupButton.disabled = true; const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password }); if (error) { console.error("Login error:", error); showAuthMessage(error.message || "Login failed.", true); } else { console.log("Login successful:", data); } } catch (error) { console.error("Unexpected login error:", error); showAuthMessage("An unexpected error occurred during login.", true); } finally { loginButton.disabled = false; signupButton.disabled = false; } }
+        async function handleSignup() { clearAuthMessages(); if (!supabaseClient) return showAuthMessage("Supabase client not available.", true); const email = emailInput.value; const password = passwordInput.value; if (!email || !password) return showAuthMessage("Please enter both email and password.", true); if (password.length < 6) return showAuthMessage("Password should be at least 6 characters.", true); try { loginButton.disabled = true; signupButton.disabled = true; const { data, error } = await supabaseClient.auth.signUp({ email, password }); if (error) { console.error("Signup error:", error); if (error.message.includes("User already registered")) showAuthMessage("This email is already registered. Try logging in.", true); else showAuthMessage(error.message || "Sign up failed.", true); } else { console.log("Signup attempt result:", data); if (data.user && data.user.identities && data.user.identities.length === 0) showAuthMessage("Signup successful! Please check your email to confirm your account.", false); else if (data.session) showAuthMessage("Signup successful! You are logged in.", false); else showAuthMessage("Signup successful! Confirmation might be required (check email).", false); } } catch (error) { console.error("Unexpected signup error:", error); showAuthMessage("An unexpected error occurred during sign up.", true); } finally { loginButton.disabled = false; signupButton.disabled = false; } }
+        async function handleLogout() { clearAuthMessages(); if (!supabaseClient) return; try { logoutButton.disabled = true; const { error } = await supabaseClient.auth.signOut(); if (error) console.error("Logout error:", error); else console.log("Logout successful"); } catch (error) { console.error("Unexpected logout error:", error); } finally { logoutButton.disabled = false; } }
+
+
+        // --- Chat Logic ---
+        // (Keep existing handleSendMessage function)
+        async function handleSendMessage() { const messageText = messageInput.value.trim(); if (!messageText || !supabaseClient) return; addMessageToUI(messageText, true); messageInput.value = ''; showLoading(true); sendButton.disabled = true; try { console.log("Invoking Supabase function 'gemini-chat'..."); const { data, error } = await supabaseClient.functions.invoke('gemini-chat', { body: JSON.stringify({ message: messageText }), }); if (error) { console.error('Supabase function invocation error:', error); addMessageToUI(`Error: ${error.message}`, false); } else if (data && data.error) { console.error('Error returned from function:', data.error); addMessageToUI(`Sorry, there was an issue: ${data.error}`, false); } else if (data && data.reply) { console.log('Received reply from function:', data.reply); addMessageToUI(data.reply, false); } else { console.error('Unexpected response structure from function:', data); addMessageToUI('Sorry, received an unexpected response from the server.', false); } } catch (invokeError) { console.error('Unexpected error sending message:', invokeError); addMessageToUI(`An unexpected error occurred: ${invokeError.message}`, false); } finally { showLoading(false); sendButton.disabled = false; } }
+
+
+        // --- Event Listeners ---
+        // (Keep existing setupEventListeners function)
+        function setupEventListeners() { if (loginButton) loginButton.addEventListener('click', handleLogin); if (signupButton) signupButton.addEventListener('click', handleSignup); if (logoutButton) logoutButton.addEventListener('click', handleLogout); if (sendButton) sendButton.addEventListener('click', handleSendMessage); if (messageInput) messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }); console.log("Event listeners attached."); }
+
+
+        // --- Supabase Auth State Change Listener ---
+        // (Keep existing setupAuthListener function - it will handle Google Sign-In success too)
+        function setupAuthListener() { if (!supabaseClient) { console.error("Cannot set up auth listener: Supabase client not initialized."); authSection.classList.remove('hidden'); chatInterface.classList.add('hidden'); return; } supabaseClient.auth.onAuthStateChange((event, session) => { console.log('Auth State Change:', event, session); clearAuthMessages(); if (event === 'SIGNED_IN' && session && session.user) { console.log('User signed in:', session.user.email); authSection.classList.add('hidden'); chatInterface.classList.remove('hidden'); userEmailDisplay.textContent = session.user.email; messageArea.innerHTML = ''; messageArea.appendChild(loadingIndicator); } else if (event === 'SIGNED_OUT') { console.log('User signed out.'); authSection.classList.remove('hidden'); chatInterface.classList.add('hidden'); userEmailDisplay.textContent = ''; emailInput.value = ''; passwordInput.value = ''; messageArea.innerHTML = ''; messageArea.appendChild(loadingIndicator); } }); console.log("Auth state change listener set up."); }
+
+
+        // --- Initialization ---
+        // (Keep existing initializeApp function)
+        async function initializeApp() { console.log("Initializing app..."); if (!supabaseClient) { console.error("Initialization failed: Supabase client not available."); authSection.classList.remove('hidden'); chatInterface.classList.add('hidden'); return; } try { const { data: { session }, error } = await supabaseClient.auth.getSession(); console.log("Initial session check complete."); if (error) { console.error("Error getting initial session:", error); showAuthMessage("Error checking session: " + error.message, true); authSection.classList.remove('hidden'); chatInterface.classList.add('hidden'); } else if (session && session.user) { console.log("User initially logged in:", session.user.email); authSection.classList.add('hidden'); chatInterface.classList.remove('hidden'); userEmailDisplay.textContent = session.user.email; messageArea.appendChild(loadingIndicator); } else { console.log("User initially logged out."); authSection.classList.remove('hidden'); chatInterface.classList.add('hidden'); messageArea.appendChild(loadingIndicator); } } catch (err) { console.error("Unexpected error during initial auth check:", err); showAuthMessage("Initialization error. Check console.", true); authSection.classList.remove('hidden'); chatInterface.classList.add('hidden'); } finally { setupEventListeners(); setupAuthListener(); console.log("App initialization complete."); } }
+
+        // --- Run Initialization ---
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+    </script>
+
+</body>
+</html>
